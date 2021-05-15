@@ -15,7 +15,6 @@ var (
 
 // var baseURL string = "https://www.linkedin.com/jobs/search/?keywords=react"
 
-// $ go get github.com/PuerkitoBio/goquery
 func main() {
 	getPages()
 }
