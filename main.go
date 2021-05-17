@@ -5,9 +5,18 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+type extractedJob struct {
+	id string
+	title string
+	location string
+	salary string
+	summary string
+}
 
 // var (
 // 	limit int = 50
@@ -29,16 +38,37 @@ var baseURL string = "https://ca.indeed.com/jobs?q=react&l=Toronto+ON"
 
 func main() {
 	totalPages := getPages(baseURL, 0)
-	fmt.Println(totalPages)
+	fmt.Println("totalPages: ",totalPages)
 
 	for page := 0; page <= totalPages; page++ {
-		pageURL := baseURL + "&start=" + strconv.Itoa(page * 10)
-		fmt.Println("Requesting", pageURL)
+		getPage(page)
 	}
 }
 
 func getPage(page int) {
+	pageURL := baseURL + "&start=" + strconv.Itoa(page * 10)
+	fmt.Println("Requesting", pageURL)
+	res, err := http.Get(pageURL)
+	checkErr(err)
+	checkCode(res)
 
+	defer res.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	checkErr(err)
+
+	searchCards := doc.Find(".jobsearch-SerpJobCard")
+	searchCards.Each(func(i int, card *goquery.Selection){
+		id, _ := card.Attr("data-jk")
+		title := cleanString(card.Find(".title > a").Text())
+		location := cleanString(card.Find(".sjcl > .location").Text())
+		fmt.Println(id, title, location) 
+	})
+}
+
+// 3:33
+func cleanString(str string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(str)), " ")
 }
 
 func getPages(url string, start int) int {
@@ -57,18 +87,17 @@ func getPages(url string, start int) int {
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	checkErr(err)
 
-	fmt.Println("start: ", start)
-	// fmt.Println(doc)
 	doc.Find(".pagination-list").Each(func(i int, s *goquery.Selection){
 		tags := s.Find("a")
-		pages = tags.Length()
-		// fmt.Println(s.Html())
 		tags.Each(func(i int, s *goquery.Selection){
-			fmt.Println(s.Attr("aria-label"))
+			// fmt.Println(s.Attr("aria-label"))
 			isNext, _ := s.Attr("aria-label")
 			if (isNext == "Next") {
-				fmt.Println("YES", isNext, i)
-				// getPages(url, i*10)
+				pages = getPages(url, (pages - 1)*10)
+			} else {
+				if i, err := strconv.Atoi(isNext); err == nil {
+					pages = i
+				}
 			}
 		})
 	})
