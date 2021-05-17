@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -37,15 +39,42 @@ type extractedJob struct {
 var baseURL string = "https://ca.indeed.com/jobs?q=react&l=Toronto+ON"
 
 func main() {
+	var jobs []extractedJob
 	totalPages := getPages(baseURL, 0)
 	fmt.Println("totalPages: ",totalPages)
 
 	for page := 0; page <= totalPages; page++ {
-		getPage(page)
+		extractedJobs := getPage(page)
+		jobs = append(jobs, extractedJobs...)
+	}
+
+	// fmt.Println(jobs)
+	writeJobs(jobs)
+}
+
+func writeJobs(jobs []extractedJob) {
+	file, err := os.Create("jobs.csv")
+	checkErr(err)
+	
+	w := csv.NewWriter(file)
+	defer w.Flush()
+
+	headers := []string{"Apply", "Title", "Location", "Salary", "Summary"}
+	
+	wErr := w.Write(headers)
+	checkErr(wErr)
+
+	for _, job := range jobs {
+		jobSlice := []string{"https://ca.indeed.com/viewjob?jk=" + job.id, job.title, job.location, job.salary, job.summary}
+		jwErr := w.Write(jobSlice)
+		checkErr(jwErr)
 	}
 }
 
-func getPage(page int) {
+func getPage(page int) []extractedJob {
+
+	var jobs [] extractedJob
+
 	pageURL := baseURL + "&start=" + strconv.Itoa(page * 10)
 	fmt.Println("Requesting", pageURL)
 	res, err := http.Get(pageURL)
@@ -59,14 +88,28 @@ func getPage(page int) {
 
 	searchCards := doc.Find(".jobsearch-SerpJobCard")
 	searchCards.Each(func(i int, card *goquery.Selection){
-		id, _ := card.Attr("data-jk")
-		title := cleanString(card.Find(".title > a").Text())
-		location := cleanString(card.Find(".sjcl > .location").Text())
-		fmt.Println(id, title, location) 
+		job := extractJob(card)
+		jobs = append(jobs, job)
 	})
+
+	return jobs
 }
 
-// 3:33
+func extractJob(card *goquery.Selection) extractedJob {
+	id, _ := card.Attr("data-jk")
+	title := cleanString(card.Find(".title > a").Text())
+	location := cleanString(card.Find(".sjcl > .location").Text())
+	salary := cleanString(card.Find(".salaryText").Text())
+	summary := cleanString(card.Find(".summary").Text())
+	return extractedJob{
+		id: id,
+		title: title,
+		location: location,
+		salary: salary,
+		summary: summary,
+	}
+}
+
 func cleanString(str string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(str)), " ")
 }
